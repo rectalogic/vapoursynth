@@ -25,6 +25,8 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <locale>
+#include <codecvt>
 
 #ifdef VS_TARGET_OS_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -105,8 +107,29 @@ static void real_init(void) VS_NOEXCEPT {
         return;
 #endif
     int preInitialized = Py_IsInitialized();
-    if (!preInitialized)
-        Py_InitializeEx(0);
+    if (!preInitialized) {
+	const char *venvEnv = getenv("VIRTUAL_ENV");
+	if (venvEnv) {
+	    PyConfig config;
+	    PyStatus status;
+	    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::wstring venv;
+	    venv.append(converter.from_bytes(venvEnv));
+#ifdef VS_TARGET_OS_WINDOWS
+	    venv.append(L"\\bin\\python.exe");
+#else
+	    venv.append(L"/bin/python3");
+#endif
+            PyConfig_InitPythonConfig(&config);
+	    status = PyConfig_SetString(&config, &config.executable, venv.c_str());
+	    PyConfig_Clear(&config);
+            if (PyStatus_Exception(status)) {
+                return;
+            }
+	}
+	else
+            Py_InitializeEx(0);
+    }
     s = PyGILState_Ensure();
     if (import_vapoursynth())
         return;
